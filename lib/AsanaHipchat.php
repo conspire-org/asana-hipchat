@@ -152,6 +152,8 @@ class AsanaHipchat
 	{
 		if (!is_null($allowed_projects)) {
 			$this->allowed_projects = explode(" ", $allowed_projects);
+		} else {
+		  $this->allowed_projects = NULL;
 		}
 	}
 
@@ -436,46 +438,62 @@ class AsanaHipchat
 			$workspacesJson = json_decode($workspaces);
 
 			foreach ($workspacesJson->data as $workspace){
-				$arr_data[(string)$workspace->id] = array(
-					'name' => htmlentities($workspace->name, ENT_COMPAT, "UTF-8"),
-					'projects' => array()
-				);
 
-				// Get all projects in the current workspace (all non-archived projects)
-				$projects = $this->obj_asana->getProjectsInWorkspace($workspace->id, $archived = false);
+				if (!is_null(ASANA_WORKSPACE_ID) && $workspace->id == ASANA_WORKSPACE_ID) {
 
-				// As Asana API documentation says, when response is successful, we receive a 200 in response so...
-				if($this->obj_asana->responseCode == "200" && !is_null($projects)){
-					$projectsJson = json_decode($projects);
-					foreach ($projectsJson->data as $project){
-						if (is_null($this->allowed_projects) || in_array($project->id, $this->allowed_projects)) {
-							$arr_data[(string)$workspace->id]['projects'][(string)$project->id] = array(
-								'name' => htmlentities($project->name, ENT_COMPAT, "UTF-8"),
-								'tasks' => array()
-							);
+					echo "\n==================\nWorkspace: {$workspace->name}\n==================";
 
-							// Get all tasks in the current project
-							$tasks = $this->obj_asana->getProjectTasks($project->id);
-							$tasksJson = json_decode($tasks);
-							if($this->obj_asana->responseCode == "200" && !is_null($tasks)){
-								foreach ($tasksJson->data as $task){
-									$arr_data[(string)$workspace->id]['projects'][(string)$project->id]['tasks'][(string)$task->id] = array(
-										'name' => htmlentities($task->name, ENT_COMPAT, "UTF-8"),
-										'data' => array()
-									);
+					$arr_data[(string)$workspace->id] = array(
+						'name' => htmlentities($workspace->name, ENT_COMPAT, "UTF-8"),
+						'projects' => array()
+					);
 
-									$this->getTask($project->name, $task->id, $arr_data[(string)$workspace->id]['projects'][(string)$project->id]['tasks'][(string)$task->id]['data']);
+					// Get all projects in the current workspace (all non-archived projects)
+					$projects = $this->obj_asana->getProjectsInWorkspace($workspace->id, $archived = false);
+
+					// As Asana API documentation says, when response is successful, we receive a 200 in response so...
+					if($this->obj_asana->responseCode == "200" && !is_null($projects)){
+						$projectsJson = json_decode($projects);
+
+						foreach ($projectsJson->data as $project){
+							if (is_null($this->allowed_projects) || in_array($project->id, $this->allowed_projects)) {
+								$arr_data[(string)$workspace->id]['projects'][(string)$project->id] = array(
+									'name' => htmlentities($project->name, ENT_COMPAT, "UTF-8"),
+									'tasks' => array()
+								);
+								echo "\n\nProject: {$project->name}";
+								// Get all tasks in the current project
+								$tasks = $this->obj_asana->getProjectTasks($project->id);
+								$tasksJson = json_decode($tasks);
+
+								if($this->obj_asana->responseCode == "200" && !is_null($tasks)){
+									foreach ($tasksJson->data as $task){
+										echo "\n\tTask: {$task->name}";
+										$arr_data[(string)$workspace->id]['projects'][(string)$project->id]['tasks'][(string)$task->id] = array(
+											'name' => htmlentities($task->name, ENT_COMPAT, "UTF-8"),
+											'data' => array()
+										);
+
+										try {
+											$this->getTask($project->name, $task->id, $arr_data[(string)$workspace->id]['projects'][(string)$project->id]['tasks'][(string)$task->id]['data']);
+										} catch (Exception $e) {
+										    echo "Caught exception while getting task {$task->name} ({$task->id}): ",  $e->getMessage(), "\n";
+										}
+									}
+								} else {
+									echo "Error while trying to connect to Asana, response code: {$this->obj_asana->responseCode}";
 								}
 							} else {
-								echo "Error while trying to connect to Asana, response code: {$this->obj_asana->responseCode}";
+								echo "Ignoring project : {$project->id}";
 							}
-						} else {
-							echo "Ignoring project : {$project->id}";
 						}
+
+					} else {
+						echo "Error while trying to connect to Asana, response code: {$this->obj_asana->responseCode}";
 					}
 
 				} else {
-					echo "Error while trying to connect to Asana, response code: {$this->obj_asana->responseCode}";
+					echo "\nSkipping workspace {$workspace->name}\n";
 				}
 
 			}
